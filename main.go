@@ -2,9 +2,12 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
@@ -60,6 +63,15 @@ func main() {
 	//add task
 	router.HandleFunc("/tasks", addTask).Methods("POST")
 
+	//fetch update task form
+	router.HandleFunc("/gettaskupdateform/{id}", getTaskUpdateForm)
+
+	//update task
+	router.HandleFunc("/tasks/{id}", updateTask).Methods("PUT", "POST")
+
+	//delete task
+	router.HandleFunc("/tasks/{id}", deleteTask).Methods("DELETE")
+
 	http.ListenAndServe(":3000", router)
 
 }
@@ -107,6 +119,90 @@ func getTaskForm(w http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(w, "addTaskForm", nil)
 }
 
+func getTaskUpdateForm(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	taskId, _ := strconv.Atoi(vars["id"])
+
+	task, err := getTaskById(db, taskId)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+	}
+
+	tmpl.ExecuteTemplate(w, "updateTaskForm", task)
+}
+
+func updateTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	taskItem := r.FormValue("task")
+	isDone := r.FormValue("done")
+
+	var taskStatus bool
+
+	switch strings.ToLower(isDone) {
+	case "yes", "on":
+		taskStatus = true
+	case "no", "off":
+		taskStatus = false
+	default:
+		taskStatus = false
+	}
+
+	taskId, _ := strconv.Atoi(vars["id"])
+
+	task := Task{
+		Id:   taskId,
+		Task: taskItem,
+		Done: taskStatus,
+	}
+
+	query := "UPDATE tasks SET task = ?, done = ? WHERE id = ?"
+
+	result, err := db.Exec(query, task.Task, task.Done, task.Id)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+
+	if rowsAffected == 0 {
+		http.Error(w, "No task found with id "+strconv.Itoa(task.Id), http.StatusNotFound)
+	}
+
+	todos, _ := getTasks(db)
+
+	tmpl.ExecuteTemplate(w, "todoList", todos)
+}
+
+func deleteTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	taskId, _ := strconv.Atoi(vars["id"])
+
+	query := "DELETE FROM tasks WHERE id = ?"
+
+	stmt, err := db.Prepare(query)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer stmt.Close()
+
+	_, deleteError := stmt.Exec(taskId)
+
+	if deleteError != nil {
+		log.Fatal(deleteError)
+	}
+
+	todos, _ := getTasks(db)
+
+	tmpl.ExecuteTemplate(w, "todoList", todos)
+
+}
+
 // Utility Functions
 
 func getTasks(dbPointer *sql.DB) ([]Task, error) {
@@ -139,4 +235,23 @@ func getTasks(dbPointer *sql.DB) ([]Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func getTaskById(dbPointer *sql.DB, id int) (*Task, error) {
+	query := "SELECT id, task, done FROM tasks WHERE id = ?"
+
+	var task Task
+
+	row := dbPointer.QueryRow(query, id)
+
+	err := row.Scan(&task.Id, &task.Task, &task.Done)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("No task found with id %d", id)
+		}
+		return nil, err
+	}
+
+	return &task, nil
 }

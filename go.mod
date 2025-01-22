@@ -1,4 +1,4 @@
-module github.com/jake-t-dev/udemy-go-server-template
+module github.com/jake-t-dev/go-htmx-crud-site
 
 go 1.23.1
 
