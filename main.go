@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -10,6 +11,17 @@ import (
 )
 
 var db *sql.DB
+var tmpl *template.Template
+
+func init() {
+	var err error
+
+	tmpl, err = template.ParseGlob("templates/*.html")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 func initDB() {
 	var err error
@@ -38,11 +50,9 @@ func main() {
 }
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	var version string
+	err := tmpl.ExecuteTemplate(w, "home.html", nil)
 
-	if err := db.QueryRow("SELECT VERSION()").Scan(&version); err != nil {
-		log.Fatal(err)
+	if err != nil {
+		http.Error(w, "Error executing teamplate: "+err.Error(), http.StatusInternalServerError)
 	}
-
-	w.Write([]byte("db version: " + version))
 }
