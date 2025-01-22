@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -52,11 +51,20 @@ func main() {
 
 	router.HandleFunc("/", HomeHandler)
 
+	// get tasks
 	router.HandleFunc("/tasks", fetchTasks).Methods("GET")
+
+	//fetch add task form
+	router.HandleFunc("/getnewtaskform", getTaskForm)
+
+	//add task
+	router.HandleFunc("/tasks", addTask).Methods("POST")
 
 	http.ListenAndServe(":3000", router)
 
 }
+
+// Route Handlers
 
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	err := tmpl.ExecuteTemplate(w, "home.html", nil)
@@ -68,9 +76,38 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func fetchTasks(w http.ResponseWriter, r *http.Request) {
 	todos, _ := getTasks(db)
-	fmt.Println(todos)
 	tmpl.ExecuteTemplate(w, "todoList", todos)
 }
+
+func addTask(w http.ResponseWriter, r *http.Request) {
+	task := r.FormValue("task")
+
+	query := "INSERT INTO tasks (task) VALUES (?)"
+
+	stmt, err := db.Prepare(query)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer stmt.Close()
+
+	_, executeErr := stmt.Exec(task)
+
+	if executeErr != nil {
+		log.Fatal(executeErr)
+	}
+
+	todos, _ := getTasks(db)
+
+	tmpl.ExecuteTemplate(w, "todoList", todos)
+}
+
+func getTaskForm(w http.ResponseWriter, r *http.Request) {
+	tmpl.ExecuteTemplate(w, "addTaskForm", nil)
+}
+
+// Utility Functions
 
 func getTasks(dbPointer *sql.DB) ([]Task, error) {
 	query := "SELECT id, task, done FROM tasks"
@@ -100,8 +137,6 @@ func getTasks(dbPointer *sql.DB) ([]Task, error) {
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-
-	fmt.Println(tasks)
 
 	return tasks, nil
 }
